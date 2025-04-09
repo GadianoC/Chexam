@@ -6,11 +6,83 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text('Home Page')),
       body: Center(
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.pushNamed(context, '/scanner');
-          },
-          child: Text('Go to Scanner'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+
+            // Go to Scanner Button
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/scanner');
+              },
+              child: Text('Go to Scanner'),
+            ),
+
+            SizedBox(height: 20),
+
+            // 🔽 Add This: Set Answer Key Button with Item Count Dialog
+            ElevatedButton(
+              onPressed: () async {
+                final totalItems = await showDialog<int>(
+                  context: context,
+                  builder: (context) {
+                    int selectedNumber = 10;
+
+                    return AlertDialog(
+                      title: Text('How many items?'),
+                      content: StatefulBuilder(
+                        builder: (context, setState) {
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Select number of exam items:'),
+                              Slider(
+                                value: selectedNumber.toDouble(),
+                                min: 1,
+                                max: 100,
+                                divisions: 99,
+                                label: selectedNumber.toString(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    selectedNumber = value.toInt();
+                                  });
+                                },
+                              ),
+                              Text('$selectedNumber items'),
+                            ],
+                          );
+                        },
+                      ),
+                      actions: [
+                        TextButton(
+                          child: Text('Cancel'),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        ElevatedButton(
+                          child: Text('Continue'),
+                          onPressed: () =>
+                              Navigator.pop(context, selectedNumber),
+                        ),
+                      ],
+                    );
+                  },
+                );
+
+                if (totalItems != null) {
+                  final answerKey = await Navigator.pushNamed(
+                    context,
+                    '/answerKey',
+                    arguments: totalItems,
+                  );
+
+                  if (answerKey is Map<int, String>) {
+                    print('Received answer key: $answerKey');
+                  }
+                }
+              },
+              child: Text('Set Answer Key'),
+            ),
+          ],
         ),
       ),
     );
