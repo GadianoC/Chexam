@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class AnswerKeyPage extends StatefulWidget {
   final int totalQuestions;
 
-  const AnswerKeyPage({this.totalQuestions = 60});
+  const AnswerKeyPage({required this.totalQuestions});
 
   @override
   _AnswerKeyPageState createState() => _AnswerKeyPageState();
@@ -18,7 +18,6 @@ class _AnswerKeyPageState extends State<AnswerKeyPage> {
     correctAnswers = List.filled(widget.totalQuestions, 'A'); // Default to A
   }
 
-  
   void saveAnswers() async {
     final confirmed = await showDialog<bool>(
       context: context,

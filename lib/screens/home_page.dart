@@ -38,7 +38,7 @@ class HomePage extends StatelessWidget {
                               Text('Select number of exam items:'),
                               Slider(
                                 value: selectedNumber.toDouble(),
-                                min: 1,
+                                min: 10,
                                 max: 100,
                                 divisions: 99,
                                 label: selectedNumber.toString(),

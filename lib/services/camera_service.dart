@@ -10,7 +10,13 @@ class CameraService {
       if (cameras.isEmpty) {
         throw 'No cameras available';
       }
-      controller = CameraController(cameras.first, ResolutionPreset.medium);
+
+      // Select the first available camera, you could enhance this later to allow for camera switching
+      final selectedCamera = cameras.first;
+      
+      // You can customize the resolution here based on your needs
+      controller = CameraController(selectedCamera, ResolutionPreset.medium);
+
       await controller?.initialize();
     } catch (e) {
       throw 'Error initializing camera: $e';
