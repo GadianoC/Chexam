@@ -39,8 +39,8 @@ class HomePage extends StatelessWidget {
                               Slider(
                                 value: selectedNumber.toDouble(),
                                 min: 10,
-                                max: 100,
-                                divisions: 99,
+                                max: 60,
+                                divisions: 50,
                                 label: selectedNumber.toString(),
                                 onChanged: (value) {
                                   setState(() {

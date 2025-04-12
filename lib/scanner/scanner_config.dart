@@ -1,6 +1,10 @@
-const int bubbleWidth = 25; 
-const int bubbleHeight = 25; 
-const int startX = 60;      
-const int startY = 120;      
-const int rowSpacing = 50;  
-const int colSpacing = 35;  
+const int bubbleWidth = 35;  // Reduced bubble size
+const int bubbleHeight = 35; // Reduced bubble size
+const int startX = 130;      // Adjusted starting X position
+const int startY = 370;      // Adjusted starting Y position
+const int rowSpacing = 60;  // Reduced row spacing
+const int colSpacing = 55;  // Reduced column spacing
+
+// Column configuration
+const int questionsPerColumn = 20;
+const int columnSpacing = 290; // Space between columns

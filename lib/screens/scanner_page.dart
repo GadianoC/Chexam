@@ -65,35 +65,46 @@ class _ScannerPageState extends State<ScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Bubble Sheet Scanner')),
+      appBar: AppBar(
+        title: Text('Bubble Sheet Scanner'),
+        backgroundColor: Colors.black.withOpacity(0.7),
+      ),
+      extendBodyBehindAppBar: true, // Make body extend behind app bar
       body: Stack(
         children: [
           // Show camera preview if camera is initialized and controller is not null
           if (cameraService.controller != null && cameraService.controller!.value.isInitialized)
             Positioned.fill(
-              child: CameraPreview(cameraService.controller!),  // Camera preview
+              child: CameraPreview(cameraService.controller!),
             ),
           
           // Add a bubble position visualization
           if (cameraService.controller != null && cameraService.controller!.value.isInitialized)
             Positioned.fill(
               child: CustomPaint(
-                painter: BubblePositionPainter(),  // New custom painter for bubble positions
+                painter: BubblePositionPainter(),
               ),
             ),
           
-          // Button to trigger bubble sheet scanning
-          Positioned(
-            bottom: 40,
-            left: 20,
-            right: 20,
-            child: ElevatedButton(
-              onPressed: scanBubbleSheet,
-              child: Text("Scan"),
+          // Add camera guide overlay
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.5),
+                  width: 2,
+                ),
+              ),
             ),
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: scanBubbleSheet,
+        child: Icon(Icons.camera),
+        backgroundColor: Colors.blue,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
@@ -103,31 +114,80 @@ class BubblePositionPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.red.withOpacity(0.8)
-      ..style = PaintingStyle.fill;
+      ..color = Colors.red.withOpacity(0.9)  // Changed to semi-transparent green for better visibility
+      ..style = PaintingStyle.stroke  // Changed to stroke style
+      ..strokeWidth = 2.0;
 
     final textPaint = TextPainter(
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
     );
 
-    // Visualize bubble positions with numbers
-    for (int q = 0; q < 60; q++) {
-      int rowY = startY + (q * rowSpacing);
+    // Scale factors to adjust for different screen sizes
+    double scaleX = size.width / 1080;  // Assuming 1080p as base resolution
+    double scaleY = size.height / 1920;
 
-      for (int opt = 0; opt < 4; opt++) {
-        int x = startX + (opt * colSpacing);
+    // Visualize bubble positions for each column
+    for (int col = 0; col < 3; col++) {
+      for (int q = 0; q < questionsPerColumn; q++) {
+        int questionNumber = col * questionsPerColumn + q + 1;
+        double rowY = (startY + (q * rowSpacing)) * scaleY;
+        double colX = (startX + (col * columnSpacing)) * scaleX;
 
-        // Draw circle (representing bubble) at position (x, rowY)
-        canvas.drawCircle(Offset(x + bubbleWidth / 2, rowY + bubbleHeight / 2), 20, paint);
+        for (int opt = 0; opt < 4; opt++) {
+          double x = colX + (opt * colSpacing) * scaleX;
+          double bubbleLeft = x;
+          double bubbleTop = rowY;
+          
+          // Draw rectangle for bubble position
+          canvas.drawRect(
+            Rect.fromLTWH(
+              bubbleLeft,
+              bubbleTop,
+              bubbleWidth * scaleX,
+              bubbleHeight * scaleY,
+            ),
+            paint,
+          );
 
-        // Draw number in the center of the bubble
+          // Draw option letter (A, B, C, D)
+          if (q == 0) {  // Only draw letters for the first row of each column
+            textPaint.text = TextSpan(
+              text: String.fromCharCode(65 + opt),  // 65 is ASCII 'A'
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12 * scaleX,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+            textPaint.layout(minWidth: 0, maxWidth: double.infinity);
+            textPaint.paint(
+              canvas,
+              Offset(
+                bubbleLeft + (bubbleWidth * scaleX - textPaint.width) / 2,
+                bubbleTop - 20 * scaleY,
+              ),
+            );
+          }
+        }
+
+        // Draw question number
         textPaint.text = TextSpan(
-          text: '${q + 1}',  // Display question number
-          style: TextStyle(color: Colors.white, fontSize: 14),
+          text: '$questionNumber',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12 * scaleX,
+            fontWeight: FontWeight.bold,
+          ),
         );
         textPaint.layout(minWidth: 0, maxWidth: double.infinity);
-        textPaint.paint(canvas, Offset(x + bubbleWidth / 4, rowY + bubbleHeight / 4));
+        textPaint.paint(
+          canvas,
+          Offset(
+            colX - 25 * scaleX,
+            rowY + (bubbleHeight * scaleY - textPaint.height) / 2,
+          ),
+        );
       }
     }
   }
@@ -137,4 +197,3 @@ class BubblePositionPainter extends CustomPainter {
     return false;
   }
 }
-
