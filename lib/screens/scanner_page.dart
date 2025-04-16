@@ -1,199 +1,113 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import '../services/camera_service.dart';
-import '../scanner/bubble_scanner.dart';
-import 'student_answer_page.dart';  // Import the updated results page
-import '../scanner/scanner_config.dart';  // Import the scanner configuration constants
+import '../utils/mlkit_crop_utils.dart';
+import '/widgets/loading_overlay.dart';
+import 'package:chexam_prototype/screens/scan_preview_page.dart' as custom_nav;
 
 class ScannerPage extends StatefulWidget {
+  const ScannerPage({super.key});
+
   @override
-  _ScannerPageState createState() => _ScannerPageState();
+  State<ScannerPage> createState() => _ScannerPageState();
 }
 
 class _ScannerPageState extends State<ScannerPage> {
-  final cameraService = CameraService();
-  Map<int, String>? scannedAnswers;
-  bool isDebugMode = true; // Set this as needed for production
-
-  // Initialize camera service and handle errors during initialization
+  bool _isLoading = false;
+  bool _isCapturing = false;
+  String? _error;
   @override
   void initState() {
     super.initState();
-    cameraService.initializeCamera().then((_) {
-      setState(() {});
-    }).catchError((e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Camera initialization failed: $e')));
+    // Wait 1.5 seconds before starting the scan to let the camera adjust
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        _captureAndNavigate();
+      });
     });
   }
 
-  // Dispose of camera resources when leaving the page
-  @override
-  void dispose() {
-    cameraService.dispose();
-    super.dispose();
-  }
-
-  // Capture image and process the bubble sheet for answers
-  Future<void> scanBubbleSheet() async {
-  try {
-    final pic = await cameraService.captureImage();
-    final file = File(pic.path);
-
-    if (isDebugMode) {
-      final debugPath = '${file.parent.path}/debug_bubbles.jpg';
-      await visualizeBubblePositions(file, debugPath);
-      print("Visualization saved to: $debugPath");
-    }
-
-    // Extract answers and navigate to the result page
-    final answers = await extractAnswers(file);
-
-    // Navigate to the StudentAnswerPage to show the results
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StudentAnswerPage(answers: answers),  // Passing the answers
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
       ),
     );
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error capturing image: $e')));
   }
-}
 
-  // Build the UI for ScannerPage with camera preview and scan button
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Bubble Sheet Scanner'),
-        backgroundColor: Colors.black.withOpacity(0.7),
-      ),
-      extendBodyBehindAppBar: true, // Make body extend behind app bar
-      body: Stack(
-        children: [
-          // Show camera preview if camera is initialized and controller is not null
-          if (cameraService.controller != null && cameraService.controller!.value.isInitialized)
-            Positioned.fill(
-              child: CameraPreview(cameraService.controller!),
-            ),
-          
-          // Add a bubble position visualization
-          if (cameraService.controller != null && cameraService.controller!.value.isInitialized)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: BubblePositionPainter(),
-              ),
-            ),
-          
-          // Add camera guide overlay
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.5),
-                  width: 2,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: scanBubbleSheet,
-        child: Icon(Icons.camera),
-        backgroundColor: Colors.blue,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-    );
-  }
-}
-
-// Custom painter to visualize bubble positions with numbers
-class BubblePositionPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.red.withOpacity(0.9)  // Changed to semi-transparent green for better visibility
-      ..style = PaintingStyle.stroke  // Changed to stroke style
-      ..strokeWidth = 2.0;
-
-    final textPaint = TextPainter(
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    );
-
-    // Scale factors to adjust for different screen sizes
-    double scaleX = size.width / 1080;  // Assuming 1080p as base resolution
-    double scaleY = size.height / 1920;
-
-    // Visualize bubble positions for each column
-    for (int col = 0; col < 3; col++) {
-      for (int q = 0; q < questionsPerColumn; q++) {
-        int questionNumber = col * questionsPerColumn + q + 1;
-        double rowY = (startY + (q * rowSpacing)) * scaleY;
-        double colX = (startX + (col * columnSpacing)) * scaleX;
-
-        for (int opt = 0; opt < 4; opt++) {
-          double x = colX + (opt * colSpacing) * scaleX;
-          double bubbleLeft = x;
-          double bubbleTop = rowY;
-          
-          // Draw rectangle for bubble position
-          canvas.drawRect(
-            Rect.fromLTWH(
-              bubbleLeft,
-              bubbleTop,
-              bubbleWidth * scaleX,
-              bubbleHeight * scaleY,
-            ),
-            paint,
-          );
-
-          // Draw option letter (A, B, C, D)
-          if (q == 0) {  // Only draw letters for the first row of each column
-            textPaint.text = TextSpan(
-              text: String.fromCharCode(65 + opt),  // 65 is ASCII 'A'
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12 * scaleX,
-                fontWeight: FontWeight.bold,
-              ),
-            );
-            textPaint.layout(minWidth: 0, maxWidth: double.infinity);
-            textPaint.paint(
-              canvas,
-              Offset(
-                bubbleLeft + (bubbleWidth * scaleX - textPaint.width) / 2,
-                bubbleTop - 20 * scaleY,
-              ),
-            );
-          }
+  Future<void> _captureAndNavigate() async {
+    if (_isCapturing) return;
+    setState(() {
+      _isCapturing = true;
+      _error = null;
+    });
+    try {
+      final croppedFile = await autoCropBubbleSheetWithMLKit();
+      if (croppedFile == null) throw Exception('Failed to scan document');
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => custom_nav.ScanPreviewPage(imageFile: croppedFile),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showMessage('Failed to process image: $e');
         }
-
-        // Draw question number
-        textPaint.text = TextSpan(
-          text: '$questionNumber',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 12 * scaleX,
-            fontWeight: FontWeight.bold,
-          ),
-        );
-        textPaint.layout(minWidth: 0, maxWidth: double.infinity);
-        textPaint.paint(
-          canvas,
-          Offset(
-            colX - 25 * scaleX,
-            rowY + (bubbleHeight * scaleY - textPaint.height) / 2,
-          ),
-        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isCapturing = false);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
+  void dispose() {
+    super.dispose();
   }
-}
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Scan Sheet'),
+        backgroundColor: Colors.black87,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error:\n$_error',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _captureAndNavigate,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : const LoadingOverlay(message: 'Processing document...'),
+          );
+        }
+      }

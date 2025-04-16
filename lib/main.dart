@@ -14,10 +14,10 @@ class MyApp extends StatelessWidget {
       title: 'Bubble Scanner',
       initialRoute: '/',
       routes: {
-        '/': (context) => HomePage(),
-        '/scanner': (context) => ScannerPage(),
-        // You can REMOVE '/answerKey' from here if you're using onGenerateRoute
-      },
+  '/': (context) => HomePage(),
+  '/scanner': (context) => ScannerPage(),
+  // You can REMOVE '/answerKey' from here now if using onGenerateRoute
+},
       onGenerateRoute: (settings) {
         if (settings.name == '/answerKey') {
           final args = settings.arguments as int?;
