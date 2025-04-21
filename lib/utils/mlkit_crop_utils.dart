@@ -41,13 +41,19 @@ Future<File?> autoCropBubbleSheetWithMLKit() async {
       if (corners.length == 4 && DocumentScannerService().isValidBubbleSheetShape(corners)) {
         final rectified = DocumentScannerService().perspectiveTransform(originalImage, corners);
         final tempDir = await getTemporaryDirectory();
-        croppedFile = File('${tempDir.path}/mlkit_rectified_bubble_sheet.png');
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        croppedFile = File('${tempDir.path}/mlkit_rectified_bubble_sheet_$timestamp.png');
+        print('[DEBUG] Writing rectified image to: \\${croppedFile.path}');
         await croppedFile.writeAsBytes(img.encodePng(rectified));
+        print('[DEBUG] Finished writing rectified image.');
       } else {
         // Fallback: save the original image if perspective correction fails
         final tempDir = await getTemporaryDirectory();
-        croppedFile = File('${tempDir.path}/mlkit_cropped_bubble_sheet.png');
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        croppedFile = File('${tempDir.path}/mlkit_cropped_bubble_sheet_$timestamp.png');
+        print('[DEBUG] Writing fallback (original) image to: \\${croppedFile.path}');
         await croppedFile.writeAsBytes(img.encodePng(originalImage));
+        print('[DEBUG] Finished writing fallback (original) image.');
       }
     }
   } catch (e) {

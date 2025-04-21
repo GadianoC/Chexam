@@ -1,3 +1,4 @@
+import 'package:chexam_prototype/utils/greyscale_utils.dart';
 import 'package:flutter/material.dart';
 import '../utils/mlkit_crop_utils.dart';
 import '/widgets/loading_overlay.dart';
@@ -39,21 +40,36 @@ class _ScannerPageState extends State<ScannerPage> {
     if (_isCapturing) return;
     setState(() {
       _isCapturing = true;
+      _isLoading = true;
       _error = null;
     });
     try {
       final croppedFile = await autoCropBubbleSheetWithMLKit();
       if (croppedFile == null) throw Exception('Failed to scan document');
       if (!mounted) return;
+      final fileSize = await croppedFile.length();
+      print('[DEBUG] [ScannerPage] New scan file: \\${croppedFile.path}, size: \\${fileSize}');
+      // Process the cropped file before preview
+      final processedFile = await processImageStepByStep(
+        croppedFile,
+        threshold: 105,
+        invert: false, // Set to true if you want inverted preview
+      );
+      final processedFileSize = await processedFile.length();
+      print('[DEBUG] [ScannerPage] Processed file: \\${processedFile.path}, size: \\${processedFileSize}');
+      setState(() => _isLoading = false);
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => custom_nav.ScanPreviewPage(imageFile: croppedFile),
+          builder: (_) => custom_nav.ScanPreviewPage(imageFile: processedFile),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _showMessage('Failed to process image: $e');
@@ -78,9 +94,11 @@ class _ScannerPageState extends State<ScannerPage> {
         title: const Text('Scan Sheet'),
         backgroundColor: Colors.black87,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
+      body: Stack(
+        children: [
+          if (_isLoading)
+            const LoadingOverlay(message: "Processing, please wait..."),
+          _error != null
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -108,6 +126,9 @@ class _ScannerPageState extends State<ScannerPage> {
                   ),
                 )
               : const LoadingOverlay(message: 'Processing document...'),
+        ],
+      ),
           );
         }
       }
+      

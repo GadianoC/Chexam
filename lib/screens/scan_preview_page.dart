@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:chexam_prototype/screens/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:chexam_prototype/services/bubble_scanner_service.dart';
 // import '../scanner/bubble_overlay_painter.dart';
@@ -28,27 +29,15 @@ class _ScanPreviewPageState extends State<ScanPreviewPage> {
   @override
   void initState() {
     super.initState();
-    _makeGreyscale();
+    print('[DEBUG] [ScanPreviewPage] Received image file: \\${widget.imageFile.path}');
+    widget.imageFile.length().then((size) {
+      print('[DEBUG] [ScanPreviewPage] Image file size: \\${size}');
+    });
+    _greyscaleFile = widget.imageFile; // Assume already processed
+    _isProcessing = false;
     _error = null;
   }
 
-  Future<void> _makeGreyscale() async {
-    setState(() {
-      _isProcessing = true;
-    });
-    try {
-      final grey = await convertToGreyscale(widget.imageFile);
-      setState(() {
-        _greyscaleFile = grey;
-        _isProcessing = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _error = 'Failed to convert image to greyscale';
-      });
-    }
-  }
 
   Future<void> _runBubbleDetection() async {
     setState(() {
@@ -91,6 +80,36 @@ class _ScanPreviewPageState extends State<ScanPreviewPage> {
         title: const Text('Preview & Confirm'),
         backgroundColor: Colors.blue.shade700,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () async {
+            // Dispose of the preview image file if it exists
+            try {
+              final file = _greyscaleFile ?? widget.imageFile;
+              print('[DEBUG] Attempting to delete file: \\${file.path}');
+              final existsBefore = await file.exists();
+              print('[DEBUG] File exists before delete: \\${existsBefore}');
+              if (existsBefore) {
+                await file.delete();
+                final existsAfter = await file.exists();
+                print('[DEBUG] File exists after delete: \\${existsAfter}');
+                if (existsAfter) {
+                  print('[WARNING] File was not deleted. It may still be in use.');
+                } else {
+                  print('[INFO] File deleted successfully.');
+                }
+              } else {
+                print('[INFO] File did not exist before delete. Nothing to delete.');
+              }
+            } catch (e) {
+              print('Failed to delete preview file: \\${e.runtimeType}: \\${e.toString()}');
+            }
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => HomePage()),
+              (Route<dynamic> route) => false,
+            );
+          },
+        ),
       ),
       body: Container(
         decoration: const BoxDecoration(
