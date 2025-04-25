@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import '../scanner/scanner_config.dart';
+import 'bubble_config.dart';
 
 class BubbleOverlayPainter extends CustomPainter {
   final List<Map<String, double>> bubbles;
-  BubbleOverlayPainter(this.bubbles);
+  final Set<int>? filledBubbleIndices; // indices (or could be coordinates)
+
+  BubbleOverlayPainter(this.bubbles, {this.filledBubbleIndices});
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.red
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    for (var bubble in bubbles) {
+    for (int i = 0; i < bubbles.length; i++) {
+      final bubble = bubbles[i];
+      final isFilled = filledBubbleIndices != null && filledBubbleIndices!.contains(i);
+      final paint = Paint()
+        ..color = isFilled ? Colors.green : Colors.red
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
       canvas.drawCircle(
         Offset(bubble['x']!, bubble['y']!),
         bubble['r']!,

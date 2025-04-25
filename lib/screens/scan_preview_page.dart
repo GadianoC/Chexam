@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:chexam_prototype/screens/home_page.dart';
 import 'package:flutter/material.dart';
-import 'package:chexam_prototype/services/bubble_scanner_service.dart';
-// import '../scanner/bubble_overlay_painter.dart';
+import 'package:image/image.dart' as img;
+import '../analysis/bubble_analysis.dart';
+import '../analysis/bubble_overlay_painter.dart';
+import '../analysis/bubble_config.dart';
 import 'student_answer_page.dart';
-import 'package:chexam_prototype/utils/greyscale_utils.dart';
-
 
 class ScanPreviewPage extends StatefulWidget {
   final File imageFile;
@@ -20,35 +20,95 @@ class ScanPreviewPage extends StatefulWidget {
 }
 
 class _ScanPreviewPageState extends State<ScanPreviewPage> {
-  final BubbleScannerService _bubbleScannerService = BubbleScannerService();
+  // ...existing fields...
+
+  // Helper to map detected answers to bubble indices in the grid
+  Set<int> _getFilledBubbleIndices() {
+    Set<int> indices = {};
+    for (var entry in _answers.entries) {
+      final qIdx = entry.key - 1;
+      final oIdx = 'ABCD'.indexOf(entry.value);
+      // Bubble grid is ordered: (col 0 q0 A, col 0 q0 B, ..., col 0 q1 A, ...)
+      final col = qIdx ~/ questionsPerColumn;
+      final row = qIdx % questionsPerColumn;
+      final baseIdx = col * questionsPerColumn * 4 + row * 4;
+      final idx = baseIdx + oIdx;
+      indices.add(idx);
+    }
+    return indices;
+  }
+
+  // ...existing fields...
+
+  // Helper to build the full bubble grid for overlay
+  List<Map<String, double>> _buildBubbleGrid() {
+    List<Map<String, double>> grid = [];
+    for (int col = 0; col < 3; col++) {
+      for (int q = 0; q < questionsPerColumn; q++) {
+        final rowY = startY + q * rowSpacing;
+        final colX = startX + col * columnSpacing;
+        for (int opt = 0; opt < 4; opt++) {
+          final x = colX + opt * colSpacing;
+          grid.add({
+            'x': x,
+            'y': rowY,
+            'r': bubbleWidth / 2,
+          });
+        }
+      }
+    }
+    return grid;
+  }
+
   File? _greyscaleFile;
   bool _isProcessing = true;
   String? _error;
-  List<Map<String, double>> _detectedBubbles = [];
+
+  Map<int, String> _answers = {};
 
   @override
   void initState() {
     super.initState();
-    print('[DEBUG] [ScanPreviewPage] Received image file: \\${widget.imageFile.path}');
-    widget.imageFile.length().then((size) {
-      print('[DEBUG] [ScanPreviewPage] Image file size: \\${size}');
-    });
     _greyscaleFile = widget.imageFile; // Assume already processed
     _isProcessing = false;
     _error = null;
+    print('[DEBUG] [ScanPreviewPage] Received image file: ${widget.imageFile.path}');
+    widget.imageFile.length().then((size) {
+      print('[DEBUG] [ScanPreviewPage] Image file size: ${size}');
+      final fileName = widget.imageFile.uri.pathSegments.last;
+      if (!fileName.startsWith('greyscale')) {
+        print('[WARNING] [ScanPreviewPage] Received file does not appear to be processed: ${fileName}');
+      }
+    });
+    print('[DEBUG] Overlay image file: [36m${_greyscaleFile?.path}[0m');
+    _initAsync();
   }
 
+  Future<void> _initAsync() async {
+    if (_greyscaleFile != null) {
+      final bytes = await _greyscaleFile!.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        print('[DEBUG] Overlay image size: [36m${decoded.width}x${decoded.height}[0m');
+      }
+      final answers = await extractAnswers(_greyscaleFile!);
+      setState(() {
+        _answers = answers;
+      });
+    }
+  }
 
   Future<void> _runBubbleDetection() async {
     setState(() {
       _isProcessing = true;
       _error = null;
-      _detectedBubbles = [];
+      _answers = {};
     });
     try {
-      final bubbles = await _bubbleScannerService.scanBubbleSheet(widget.imageFile.path);
+      await loadImage(_greyscaleFile ?? widget.imageFile); // If needed for side-effects
+      final answers = await extractAnswers(_greyscaleFile ?? widget.imageFile);
       setState(() {
-        _detectedBubbles = bubbles;
+        _answers = answers;
         _isProcessing = false;
       });
     } catch (e) {
@@ -58,20 +118,6 @@ class _ScanPreviewPageState extends State<ScanPreviewPage> {
       });
     }
   }
-
-  Map<int, String> _convertBubblesToAnswers(List<Map<String, double>> bubbles) {
-    final answers = <int, String>{};
-    for (int i = 0; i < bubbles.length; i++) {
-      if (bubbles[i].isNotEmpty) {
-        // Pick the choice with the highest confidence
-        final best = bubbles[i].entries.reduce((a, b) => a.value > b.value ? a : b);
-        answers[i + 1] = best.key; // Use i if your questions are 0-indexed
-      }
-    }
-    return answers;
-  }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -146,11 +192,22 @@ class _ScanPreviewPageState extends State<ScanPreviewPage> {
                           child: AspectRatio(
                             aspectRatio: 3 / 4,
                             child: _greyscaleFile == null
-                            ? const Center(child: CircularProgressIndicator())
-                            : Image.file(
-                                _greyscaleFile!,
-                                fit: BoxFit.cover,
-                              ),
+                                ? const Text('No image selected')
+                                : Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      Image.file(_greyscaleFile!, fit: BoxFit.cover),
+                                      // Always show the grid overlay for alignment
+                                      // Always show the grid overlay, with filled bubbles highlighted after extraction
+                                      CustomPaint(
+                                        painter: BubbleOverlayPainter(
+                                          _buildBubbleGrid(),
+                                          filledBubbleIndices: _answers.isNotEmpty ? _getFilledBubbleIndices() : null,
+                                        ),
+                                        child: Container(),
+                                      ),
+                                    ],
+                                  ),
                           ),
                         ),
                       ),
@@ -170,15 +227,11 @@ class _ScanPreviewPageState extends State<ScanPreviewPage> {
                                   _error = null;
                                 });
                                 try {
-                                  final bubbles = await _bubbleScannerService.scanBubbleSheet(_greyscaleFile!.path);
-                                  final answers = _convertBubblesToAnswers(bubbles);
-                                  setState(() {
-                                    _isProcessing = false;
-                                  });
+                                  await _runBubbleDetection();
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => StudentAnswerPage(answers: answers),
+                                      builder: (context) => StudentAnswerPage(answers: _answers),
                                     ),
                                   );
                                 } catch (e) {

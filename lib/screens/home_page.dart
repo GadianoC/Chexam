@@ -1,3 +1,4 @@
+import 'package:chexam_prototype/screens/scanner_page.dart';
 import 'package:flutter/material.dart';
 import 'options_page.dart';
 
@@ -28,6 +29,8 @@ class HomePage extends StatelessWidget {
             // Go to Scanner Button
             ElevatedButton(
               onPressed: () {
+                // Reset scan flag before navigating to scanner
+                ScannerPageState.hasScannedThisSession = false;
                 Navigator.pushNamed(context, '/scanner');
               },
               child: Text('Go to Scanner'),

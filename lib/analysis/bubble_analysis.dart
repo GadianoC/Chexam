@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:math' show pi, cos, sin;
 import 'package:image/image.dart' as img;
-import 'scanner_config.dart';
+import 'bubble_config.dart';
 
 // Load the image from the file and decode it into an Image object
 Future<img.Image> loadImage(File file) async {
@@ -12,14 +12,16 @@ Future<img.Image> loadImage(File file) async {
 }
 
 // Get the average brightness of the pixels in a specific bubble area
+// Get the minimum brightness of the pixels in a specific bubble area, and print debug info
 int getAverageBrightness(img.Image image, int x, int y) {
   List<int> brightnessList = [];
   int darkPixelCount = 0;
-  const darkThreshold = 128; // Lower threshold for better detection
+  const darkThreshold = 180; // More sensitive to shading
 
   final centerX = x + (bubbleWidth ~/ 2);
   final centerY = y + (bubbleHeight ~/ 2);
-  final radius = (bubbleWidth ~/ 2).toDouble();
+  final radius = (bubbleWidth ~/ 2).toDouble() * 0.6; // Sample only 60% of the bubble radius
+  print('[DEBUG] Sampling bubble at x=$x, y=$y, center=($centerX,$centerY), r=$radius');
 
   // Sample pixels in a circular pattern
   for (double angle = 0; angle < 360; angle += 5) {
@@ -33,8 +35,7 @@ int getAverageBrightness(img.Image image, int x, int y) {
         brightnessList.add(gray);
 
         if (gray < darkThreshold) {
-          final weight = 1.0 - (r / radius);
-          darkPixelCount += (weight * 2).toInt();
+          darkPixelCount++;
         }
       }
     }
@@ -43,39 +44,43 @@ int getAverageBrightness(img.Image image, int x, int y) {
   if (brightnessList.isEmpty) return 255;
 
   brightnessList.sort();
+  final percentileIndex = (brightnessList.length * 0.1).toInt().clamp(0, brightnessList.length - 1);
+  final darkValue = brightnessList[percentileIndex];
   final medianBrightness = brightnessList[brightnessList.length ~/ 2];
   final darkPixelPercentage = darkPixelCount / (brightnessList.length);
 
-  // More aggressive dark pixel detection
-  return (darkPixelPercentage > 0.25)
-      ? (medianBrightness ~/ 2)
-      : medianBrightness;
+  print('[DEBUG] Bubble at ($x, $y): 10th%=$darkValue, median=$medianBrightness, dark%=$darkPixelPercentage');
+  return darkValue;
 }
 
+// Only select an answer if the darkest bubble is at least 30 less than the next darkest, otherwise leave blank
 String getFilledBubble(List<int> brightness) {
-  if (brightness.length != 4) return '';
-
-  // Find the two darkest bubbles
-  List<MapEntry<int, int>> indexed = List.generate(
-    brightness.length,
-    (i) => MapEntry(i, brightness[i]),
-  );
-  indexed.sort((a, b) => a.value.compareTo(b.value));
-
-  // If there's a clear darkest bubble (significantly darker than the second darkest)
-  if (indexed[0].value < indexed[1].value * 0.8) {
-    return ['A', 'B', 'C', 'D'][indexed[0].key];
+  int minValue = brightness.reduce((a, b) => a < b ? a : b);
+  int minIndex = brightness.indexOf(minValue);
+  // Find the next darkest value
+  List<int> sorted = List.from(brightness)..sort();
+  int nextDarkest = sorted.length > 1 ? sorted[1] : 255;
+  // Only return answer if it's much darker than the next
+  if (minValue < 200 && (nextDarkest - minValue) >= 30) {
+    return String.fromCharCode(65 + minIndex);
   }
-
   // If the two darkest bubbles are too similar, consider it ambiguous
   return '';
 }
 
 Future<Map<int, String>> extractAnswers(File imageFile) async {
+  print('[DEBUG] Analysis image file: \x1b[36m${imageFile.path}\x1b[0m');
+  final imgBytes = await imageFile.readAsBytes();
+  final imgDecoded = img.decodeImage(imgBytes);
+  if (imgDecoded != null) {
+    print('[DEBUG] Analysis image size: \x1b[36m${imgDecoded.width}x${imgDecoded.height}\x1b[0m');
+  }
   final image = await loadImage(imageFile);
   final result = <int, String>{};
 
-  for (int col = 0; col < 3; col++) {
+  // Process all columns and questions (3 columns x 20 questions)
+  const int numColumns = 3;
+  for (int col = 0; col < numColumns; col++) {
     for (int q = 0; q < questionsPerColumn; q++) {
       final questionNumber = col * questionsPerColumn + q + 1;
       final rowY = startY.toInt() + (q * rowSpacing).toInt();
@@ -88,7 +93,12 @@ Future<Map<int, String>> extractAnswers(File imageFile) async {
         brightness.add(avg);
       }
 
+      // Print all candidate brightnesses for this question
+      for (int i = 0; i < brightness.length; i++) {
+        print('[DEBUG] Q$questionNumber option ${String.fromCharCode(65 + i)}: brightness=${brightness[i]}');
+      }
       final answer = getFilledBubble(brightness);
+      print('[DEBUG] Q$questionNumber brightness: $brightness => $answer');
       if (answer.isNotEmpty) {
         result[questionNumber] = answer;
       }
